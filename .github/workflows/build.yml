@@ -1,0 +1,64 @@
+name: Build Nebula TV APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip project
+        run: |
+          if [ -f NebulaTV-android.zip ]; then
+            unzip -o -q NebulaTV-android.zip -x '.github/*'
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Restore signing key
+        env:
+          KEY: ${{ secrets.NEBULA_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::Add the NEBULA_KEYSTORE_B64 secret first."
+            exit 1
+          fi
+          mkdir -p keystore
+          echo "$KEY" | base64 -d > keystore/nebula.jks
+
+      - name: Bundle player libraries
+        run: |
+          mkdir -p app/src/main/assets
+          curl -fsSL https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js -o app/src/main/assets/hls.min.js
+          curl -fsSL https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js -o app/src/main/assets/mpegts.min.js
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build APK
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk NebulaTV.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NebulaTV-apk
+          path: NebulaTV.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Nebula TV build ${{ github.run_number }}
+          files: NebulaTV.apk
+          make_latest: true
