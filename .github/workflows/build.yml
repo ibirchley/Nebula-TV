@@ -13,12 +13,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Unzip project
+      - name: Find and unzip project
         run: |
-          if [ -f NebulaTV-android.zip ]; then
-            unzip -o -q NebulaTV-android.zip -x '.github/*'
+          echo "Files in repo:"; ls -la
+          ZIP=""; BEST=0
+          for z in *.zip; do
+            [ -f "$z" ] || continue
+            unzip -l "$z" | grep -q "gradlew$" || continue
+            T=$(git log -1 --format=%ct -- "$z"); T=${T:-0}
+            echo "Found $z (uploaded $T)"
+            if [ "$T" -ge "$BEST" ]; then BEST=$T; ZIP="$z"; fi
+          done
+          rm -rf _build && mkdir _build
+          if [ -n "$ZIP" ]; then
+            echo "Using $ZIP"; unzip -q -o "$ZIP" -d _build
+            GW=$(find _build -maxdepth 3 -name gradlew -type f | head -1)
+          else
+            GW=$(find . -maxdepth 3 -name gradlew -type f -not -path './_build/*' | head -1)
           fi
+          if [ -z "$GW" ]; then
+            echo "::error::No project found. Upload NebulaTV-android.zip itself (not the files inside it)."
+            exit 1
+          fi
+          echo "PROJ=$(cd "$(dirname "$GW")" && pwd)" >> "$GITHUB_ENV"
+          echo "Project folder: $(dirname "$GW")"
 
       - uses: actions/setup-java@v4
         with:
@@ -30,25 +51,26 @@ jobs:
           KEY: ${{ secrets.NEBULA_KEYSTORE_B64 }}
         run: |
           if [ -z "$KEY" ]; then
-            echo "::error::Add the NEBULA_KEYSTORE_B64 secret first."
+            echo "::error::Add the NEBULA_KEYSTORE_B64 repository secret first."
             exit 1
           fi
-          mkdir -p keystore
-          echo "$KEY" | base64 -d > keystore/nebula.jks
+          mkdir -p "$PROJ/keystore"
+          echo "$KEY" | base64 -d > "$PROJ/keystore/nebula.jks"
 
-      - name: Bundle player libraries
+      - name: Bundle player libraries into the app
         run: |
-          mkdir -p app/src/main/assets
-          curl -fsSL https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js -o app/src/main/assets/hls.min.js
-          curl -fsSL https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js -o app/src/main/assets/mpegts.min.js
+          cd "$PROJ/app/src/main/assets"
+          for i in 1 2 3; do curl -fsSL https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js -o hls.min.js && break; sleep 5; done || true
+          for i in 1 2 3; do curl -fsSL https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.min.js -o mpegts.min.js && break; sleep 5; done || true
 
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Build APK
         run: |
+          cd "$PROJ"
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk NebulaTV.apk
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/NebulaTV.apk"
 
       - uses: actions/upload-artifact@v4
         with:
