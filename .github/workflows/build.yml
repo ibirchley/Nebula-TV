@@ -19,6 +19,7 @@ jobs:
       - name: Find and unzip project
         run: |
           echo "Files in repo:"; ls -la
+          # newest uploaded zip wins, whatever it is called
           ZIP=""; BEST=0
           for z in *.zip; do
             [ -f "$z" ] || continue
@@ -71,16 +72,21 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/NebulaTV.apk"
+          if [ -f app/build/outputs/apk/release/app-lite-release.apk ]; then cp app/build/outputs/apk/release/app-lite-release.apk "$GITHUB_WORKSPACE/NebulaTVLite.apk"; fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: NebulaTV-apk
-          path: NebulaTV.apk
+          path: |
+            NebulaTV.apk
+            NebulaTVLite.apk
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: Nebula TV build ${{ github.run_number }}
-          files: NebulaTV.apk
+          files: |
+            NebulaTV.apk
+            NebulaTVLite.apk
           make_latest: true
