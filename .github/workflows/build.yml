@@ -73,6 +73,9 @@ jobs:
           ./gradlew --no-daemon assembleRelease
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/NebulaTV.apk"
           if [ -f app/build/outputs/apk/release/app-lite-release.apk ]; then cp app/build/outputs/apk/release/app-lite-release.apk "$GITHUB_WORKSPACE/NebulaTVLite.apk"; fi
+          if [ -f app/build/outputs/apk/release/app-phone-release.apk ]; then cp app/build/outputs/apk/release/app-phone-release.apk "$GITHUB_WORKSPACE/NebulaTVPhone.apk"; fi
+          # A tiny file the app reads to see if there's an update, without using GitHub's rate-limited API
+          echo "{\"build\": ${{ github.run_number }}}" > "$GITHUB_WORKSPACE/version.json"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -80,6 +83,7 @@ jobs:
           path: |
             NebulaTV.apk
             NebulaTVLite.apk
+            NebulaTVPhone.apk
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -89,4 +93,6 @@ jobs:
           files: |
             NebulaTV.apk
             NebulaTVLite.apk
+            NebulaTVPhone.apk
+            version.json
           make_latest: true
